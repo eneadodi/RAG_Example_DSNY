@@ -1,8 +1,9 @@
-from sqlalchemy.orm import relationship, DeclarativeBase 
-from sqlalchemy import Column, DateTime, MetaData, event, text, String, Text, Table, Index, ForeignKey
-from typing import Dict, Any
+from sqlalchemy.orm import relationship, DeclarativeBase,Session
+from sqlalchemy import Column, DateTime, MetaData, event, text, String, Text, Table, Index, ForeignKey,Integer,Float
+from typing import dict, Any
 from datetime import datetime
 import uuid 
+from sqlalchemy.orm import foreign, remote
 from sqlalchemy import Uuid as UUID
 
 
@@ -14,7 +15,6 @@ convention = {
     "pk": "pk_%(table_name)s",
 }
 
-# Create metadata with naming convention
 # Create metadata with naming convention
 metadata = MetaData(naming_convention=convention)
 
@@ -64,63 +64,70 @@ paper_references = Table(
     'paper_references',
     Base.metadata,
     Column('citing_paper_id', UUID(), ForeignKey('papers.id'), nullable=False),
-    Column('cited_paper_id', String(20), ForeignKey('papers.arxiv_id'), nullable=False),
+    Column('cited_paper_id', UUID(), ForeignKey('papers.id'), nullable=False),
     Index('ix_paper_references_citing_id', 'citing_paper_id'),
     Index('ix_paper_references_cited_id', 'cited_paper_id')
 )
 
 class Paper(Base):
-
     __tablename__ = 'papers'
 
     arxiv_id = Column(String(20), unique=True, nullable=False, index=True)
     title = Column(String(512), nullable=False)
     summary = Column(Text, nullable=False)
-    content = Column(Text, nullable=False)
+    content = Column(Text) 
+
     source = Column(String(255))
     comment = Column(Text)
     journal_ref = Column(String(255))
-    primary_category = Column(String(20), nullable=False, index=True)  # Indexed for category searches
+    primary_category = Column(String(20), nullable=False, index=True)
     
-    # Date fields with indexes for time-based queries
-    published = Column(String(8), nullable=False, index=True)  # YYYYMMDD format
-    updated = Column(String(8), nullable=False, index=True)    # YYYYMMDD format
 
-    # Relationships
+    total_tokens = Column(Integer)
+    chunk_count = Column(Integer)
+    
+    published = Column(String(8), nullable=False, index=True)
+    updated = Column(String(8), nullable=False, index=True)
+
     authors = relationship(
         "Author",
         secondary=paper_authors,
         back_populates="papers",
-        lazy='joined'  # Optimize for common author queries
+        lazy='joined'
     )
     
     categories = relationship(
         "Category",
         secondary=paper_categories,
         back_populates="papers",
-        lazy='joined'  # Optimize for common category queries
+        lazy='joined'
     )
 
     citations = relationship(
         'Paper',
         secondary=paper_references,
-        primaryjoin=(id == paper_references.c.citing_paper_id),
-        secondaryjoin=(arxiv_id == paper_references.c.cited_paper_id),
-        backref='cited_by',
-        lazy='select'  # Citations are less frequently accessed
+        primaryjoin="Paper.id == paper_references.c.citing_paper_id",
+        secondaryjoin="Paper.id == paper_references.c.cited_paper_id",
+        backref='cited_by'
     )
-
 
     __table_args__ = (
-        Index('ix_papers_published_primary_category', 'published', 'primary_category'),  # Composite index for date+category queries
-        Index('ix_papers_title', 'title'),  # Index for title searches
+        Index('ix_papers_published_primary_category', 'published', 'primary_category'),
+        Index('ix_papers_title', 'title'),
     )
 
-    def to_dict(self, include_citations: bool = False) -> Dict[str, Any]:
+    def add_citation(self, cited_paper_arxiv_id: str, session: Session) -> None:
+        """Helper method to add citation by arxiv_id"""
+        cited_paper = session.query(Paper).filter_by(arxiv_id=cited_paper_arxiv_id).first()
+        if cited_paper:
+            self.citations.append(cited_paper)
+
+    def to_dict(self, include_citations: bool = True) -> dict[str, Any]:
         """
         Convert paper to dictionary representation.
         Args:
-            include_citations: Whether to include citation data (optional due to potential circular references)
+            include_citations: Whether to include citation data
+            include_chunks: Whether to include chunk data
         """
         data = {
             "id": str(self.id),
@@ -134,6 +141,8 @@ class Paper(Base):
             "primary_category": self.primary_category,
             "published": self.published,
             "updated": self.updated,
+            "total_tokens": self.total_tokens,
+            "chunk_count": self.chunk_count,
             "authors": [author.to_dict() for author in self.authors],
             "categories": [category.to_dict() for category in self.categories],
             "date_created": self.date_created.isoformat() if self.date_created else None,
@@ -168,7 +177,7 @@ class Author(Base):
         Index('ix_authors_name_institution', 'name', 'institution'),  # Composite index for name+institution searches
     )
 
-    def to_dict(self, include_papers: bool = False) -> Dict[str, Any]:
+    def to_dict(self, include_papers: bool = False) -> dict[str, Any]:
         """
         Convert author to dictionary representation.
         Args:
@@ -210,7 +219,7 @@ class Category(Base):
         Index('ix_categories_code_name', 'code', 'name'),  # Composite index for code+name searches
     )
 
-    def to_dict(self, include_papers: bool = False) -> Dict[str, Any]:
+    def to_dict(self, include_papers: bool = False) -> dict[str, Any]:
         """
         Convert category to dictionary representation.
         Args:
