@@ -1,6 +1,6 @@
 from sqlalchemy.orm import relationship, DeclarativeBase,Session
 from sqlalchemy import Column, DateTime, MetaData, event, text, String, Text, Table, Index, ForeignKey,Integer,Float
-from typing import dict, Any
+from typing import Any
 from datetime import datetime
 import uuid 
 from sqlalchemy.orm import foreign, remote

@@ -225,7 +225,7 @@ def load_paper_data(
         logger.error(f"Unexpected error loading paper {paper_data['id']}: {str(e)}")
         return None
     
-def load_dataset(
+def load_dataset_todb(
     dataset: list[dict[str, Any]], 
     db_url: str = 'sqlite:///arxiv_papers.db',
     batch_size: int = 100
