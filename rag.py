@@ -64,22 +64,25 @@ class RAGAgent:
         Returns:
             str: The agent's response
         """
-        # Execute the agent
-        result = self.agent_executor.invoke(
-            {
-                "input": user_input,
-                "chat_history": self.chat_history
-            }
-        )
+        try:
+            # Execute the agent
+            result = self.agent_executor.invoke(
+                {
+                    "input": user_input,
+                    "chat_history": self.chat_history
+                }
+            )
+            
+            # Update chat history
+            self.chat_history.extend([
+                HumanMessage(content=user_input),
+                AIMessage(content=result["output"]),
+            ])
+            
+            return result["output"]
+        except Exception as e:
+            return "Something went wrong!"
         
-        # Update chat history
-        self.chat_history.extend([
-            HumanMessage(content=user_input),
-            AIMessage(content=result["output"]),
-        ])
-        
-        return result["output"]
-    
     def get_chat_history(self) -> list:
         """
         Get the current chat history.
